@@ -17,6 +17,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using Aliyun.Api.LOG.Protobuf;
+using Google.Protobuf;
 
 namespace Aliyun.Api.LOG
 {
@@ -265,83 +267,132 @@ namespace Aliyun.Api.LOG
                 }
             }
         }
-     
+
         /// <summary>
         /// put logs into sls server
         /// </summary>
         /// <param name="request">The request to put logs </param>
         /// <exception>LogException</exception>
         /// <returns>The response to put logs</returns>
-        public PutLogsResponse PutLogs(PutLogsRequest request) 
+        public PutLogsResponse PutLogs(PutLogsRequest request)
         {
-            LogGroup.Builder lgBuilder = LogGroup.CreateBuilder();
-            
-            if (request.IsSetTopic())
-                lgBuilder.Topic = request.Topic;
+            // 直接构造 LogGroup，而不使用 CreateBuilder()
+            LogGroup logGroup = new LogGroup
+            {
+                Topic = request.IsSetTopic() ? request.Topic : string.Empty,
+                Source = request.IsSetSource() ? request.Source : _localMachinePrivateIp  // 默认机器私有 IP 作为 source
+            };
 
-            if (request.IsSetSource())
-                lgBuilder.Source = request.Source;
-            else
-                lgBuilder.Source = _localMachinePrivateIp;  //use default machine private ip as source (should we
+            // 添加 LogTags
+            if (request.IsSetLogTags())
+            {
+                foreach (var tag in request.LogTags)
+                {
+                    LogTag logTag = new LogTag
+                    {
+                        Key = tag.Key,
+                        Value = tag.Value
+                    };
+                    logGroup.LogTags.Add(logTag); // 将 LogTag 添加到 LogGroup 的 LogTags 列表中
+                }
+            }
 
             if (request.IsSetLogItems())
             {
                 foreach (var item in request.LogItems)
                 {
-                    Log.Builder logBuilder = Log.CreateBuilder();
-                    logBuilder.Time = item.Time;
+                    // 直接构造 Log 对象
+                    Log log = new Log
+                    {
+                        Time = item.Time
+                    };
+
                     foreach (var kv in item.Contents)
                     {
-                        Log.Types.Content.Builder contentBuilder = Log.Types.Content.CreateBuilder();
-                        contentBuilder.Key = kv.Key;
-                        contentBuilder.Value = kv.Value;
-                        logBuilder.AddContents(contentBuilder);
+                        // 直接构造 Content 对象
+                        Log.Types.Content content = new Log.Types.Content
+                        {
+                            Key = kv.Key,
+                            Value = kv.Value
+                        };
+                        log.Contents.Add(content);
                     }
-                    lgBuilder.AddLogs(logBuilder);
+
+                    logGroup.Logs.Add(log); // 将 Log 添加到 LogGroup 的 Logs 列表中
                 }
             }
 
-            return PutLogs(request, lgBuilder.Build());
+            return PutLogs(request, logGroup); // 调用另一个 PutLogs 方法进行后续处理
         }
+
 
         internal PutLogsResponse PutLogs(PutLogsRequest request, LogGroup logGroup)
         {
-            if (logGroup.LogsCount > LogConsts.LIMIT_LOG_COUNT)
-                throw new LogException("InvalidLogSize", "logItems' length exceeds maximum limitation： " + LogConsts.LIMIT_LOG_COUNT + " lines.");
-            else if(logGroup.SerializedSize > LogConsts.LIMIT_LOG_SIZE)
-                throw new LogException("InvalidLogSize", "logItems' size exceeds maximum limitation: " + LogConsts.LIMIT_LOG_SIZE + " byte.");
+            byte[] logBytes = PrepareLogBytes(logGroup);
+
             using (ServiceRequest sReq = new ServiceRequest())
             {
                 sReq.Method = HttpMethod.Post;
                 sReq.Endpoint = BuildReqEndpoint(request);
+                sReq.ResourcePath = BuildResourcePath(request);
 
-                //use empty string to replace Logstore if not set by user explicitly
-                string logstore = request.IsSetLogstore() ? request.Logstore : String.Empty;
-                sReq.ResourcePath = LogConsts.RESOURCE_LOGSTORES + LogConsts.RESOURCE_SEPARATOR + logstore;
-
+                // 添加公共头部
                 FillCommonHeaders(sReq);
                 FillCommonParameters(sReq);
+
+                // 设置 Content-Type 和压缩类型
                 sReq.Headers.Add(LogConsts.NAME_HEADER_CONTENTTYPE, LogConsts.PBVALUE_HEADER_CONTENTTYPE);
-                byte[] logBytes = logGroup.ToByteArray();
                 sReq.Headers[LogConsts.NAME_HEADER_BODYRAWSIZE] = logBytes.Length.ToString();
                 sReq.Headers.Add(LogConsts.NAME_HEADER_COMPRESSTYPE, LogConsts.VALUE_HEADER_COMPRESSTYPE_LZ4);
-                logBytes = LogClientTools.CompressToLz4(logBytes);
-                sReq.Headers.Add(LogConsts.NAME_HEADER_MD5, LogClientTools.GetMd5Value(logBytes));
-                sReq.Content = new MemoryStream(logBytes);
 
-                ExecutionContext context = new ExecutionContext();
-                context.Signer = new LogRequestSigner(sReq.ResourcePath, HttpMethod.Post);
-                context.Credentials = new ServiceCredentials(this.AccessKeyId, this.AccessKey);
+                // 压缩并计算 MD5
+                byte[] compressedBytes = CompressAndGetMd5(logBytes, sReq);
 
-                using (ServiceResponse response = serviceClient.Send(sReq, context))
-                {
-                    LogClientTools.ResponseErrorCheck(response, context.Credentials);
-                    PutLogsResponse putLogResp = new PutLogsResponse(response.Headers);
-                    return putLogResp;
-                }
+                sReq.Content = new MemoryStream(compressedBytes);
+
+                // 执行请求
+                return ExecuteRequest(sReq);
             }
-           
         }
+
+        // 准备 LogBytes 并进行必要的转换
+        private byte[] PrepareLogBytes(LogGroup logGroup)
+        {
+            return logGroup.ToByteArray();
+        }
+
+        // 构建资源路径
+        private string BuildResourcePath(PutLogsRequest request)
+        {
+            string logstore = request.IsSetLogstore() ? request.Logstore : string.Empty;
+            return LogConsts.RESOURCE_LOGSTORES + LogConsts.RESOURCE_SEPARATOR + logstore;
+        }
+
+        // 压缩数据并计算 MD5
+        private byte[] CompressAndGetMd5(byte[] logBytes, ServiceRequest sReq)
+        {
+            byte[] compressedBytes = LogClientTools.CompressToLz4(logBytes);
+            sReq.Headers.Add(LogConsts.NAME_HEADER_MD5, LogClientTools.GetMd5Value(compressedBytes));
+            return compressedBytes;
+        }
+
+        // 执行请求并返回响应
+        private PutLogsResponse ExecuteRequest(ServiceRequest sReq)
+        {
+            ExecutionContext context = new ExecutionContext
+            {
+                Signer = new LogRequestSigner(sReq.ResourcePath, HttpMethod.Post),
+                Credentials = new ServiceCredentials(this.AccessKeyId, this.AccessKey)
+            };
+
+            using (ServiceResponse response = serviceClient.Send(sReq, context))
+            {
+                LogClientTools.ResponseErrorCheck(response, context.Credentials);
+                return new PutLogsResponse(response.Headers);
+            }
+        }
+
+
 
         /// <summary>
         /// Get the topics in the logtstore
