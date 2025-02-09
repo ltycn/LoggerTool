@@ -1,0 +1,2 @@
+C:\Users\TERRY\source\repos\Logger\Logger\obj\Debug\Logger.csproj.AssemblyReference.cache
+C:\Users\TERRY\source\repos\Logger\Logger\obj\Debug\Logger.csproj.CoreCompileInputs.cache
