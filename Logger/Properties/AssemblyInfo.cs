@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 // 控制。更改这些特性值可修改
 // 与程序集关联的信息。
 [assembly: AssemblyTitle("Logger")]
-[assembly: AssemblyDescription("Online logging service")]
+[assembly: AssemblyDescription("Lenovo online logging tool")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Lenovo")]
 [assembly: AssemblyProduct("Logger")]

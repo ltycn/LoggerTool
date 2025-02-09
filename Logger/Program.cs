@@ -29,7 +29,7 @@ namespace Logger
 
             if (args.Length == 0)
             {
-                Console.WriteLine("Invalid arguments. Use: LogService.exe /stream OR LogService.exe /file /logstore <filepath>");
+                Console.WriteLine("Invalid arguments. Use: Logger.exe /stream OR Logger.exe /file /logstore <filepath>");
             }
             else if (args[0].Equals("/stream", StringComparison.OrdinalIgnoreCase) && args.Length == 1)
             {
@@ -45,7 +45,6 @@ namespace Logger
                 if (validLogStores.Contains(logStore.ToLower()))
                 {
                     var FileMode = new FileMode(Endpoint);
-                    // Again, using Wait() to block on async methods in a sync Main method
                     Task.Run(() => FileMode.Start(logStore, filePath)).Wait();
                 }
                 else
@@ -66,7 +65,7 @@ namespace Logger
             }
             else
             {
-                Console.WriteLine("Invalid arguments. Use: LogService.exe /stream OR LogService.exe /file /logstore <filepath>");
+                Console.WriteLine("Invalid arguments. Use: Logger.exe /stream OR Logger.exe /file /logstore <filepath>");
             }
         }
 

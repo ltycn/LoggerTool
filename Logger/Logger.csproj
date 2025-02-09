@@ -129,6 +129,7 @@
   <ItemGroup>
     <Compile Include="EncryptionHelper.cs" />
     <Compile Include="FileMode.cs" />
+    <Compile Include="Helpers.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="StreamMode.cs" />

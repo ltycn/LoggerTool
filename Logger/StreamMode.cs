@@ -12,6 +12,7 @@ using Aliyun.Api.LOG.Data;
 using Aliyun.Api.LOG.Request;
 using Aliyun.Api.LOG.Response;
 using Aliyun.Api.LOG;
+using System.Linq;
 
 namespace Logger
 {
@@ -47,11 +48,9 @@ namespace Logger
             // 启动后台任务处理日志队列
             Task.Run(() => ProcessLogQueue(Cts.Token));
 
-            // 同步启动所有命名管道服务
-            foreach (var pipeName in Program.PipeToLogStore.Keys)
-            {
-                StartNamedPipeServer(pipeName);
-            }
+            // 异步启动所有命名管道服务
+            var tasks = Program.PipeToLogStore.Keys.Select(pipeName => Task.Run(() => StartNamedPipeServer(pipeName))).ToArray();
+            Task.WhenAll(tasks).Wait();
 
             Console.ResetColor();
         }
@@ -64,9 +63,8 @@ namespace Logger
                 {
                     using (var pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.In, 10, PipeTransmissionMode.Message, PipeOptions.Asynchronous))
                     {
-                        // 同步等待客户端连接
                         pipeServer.WaitForConnection();
-                        SetConsoleColor(ConsoleColor.Green); // 连接成功使用绿色提示
+                        SetConsoleColor(ConsoleColor.Green);
                         Console.WriteLine($"[{pipeName}] Connected: Waiting for data...");
 
                         using (var reader = new StreamReader(pipeServer, Encoding.UTF8))
@@ -78,17 +76,17 @@ namespace Logger
                             }
                         }
 
-                        SetConsoleColor(ConsoleColor.Yellow); // 断开连接使用黄色提示
+                        SetConsoleColor(ConsoleColor.Yellow);
                         Console.WriteLine($"[{pipeName}] Disconnected: Connection closed.");
                     }
                 }
                 catch (Exception ex)
                 {
-                    SetConsoleColor(ConsoleColor.Red); // 错误使用红色提示
+                    SetConsoleColor(ConsoleColor.Red);
                     Console.WriteLine($"[{pipeName}] Error: {ex.Message}\n{ex.StackTrace}");
                 }
 
-                Thread.Sleep(1000); // 发生异常后等待 1 秒重试
+                Thread.Sleep(1000);
             }
         }
 
@@ -123,7 +121,7 @@ namespace Logger
                     ? DateTimeOffset.FromUnixTimeSeconds(timestamp)
                     : DateTimeOffset.UtcNow;
 
-                // 创建 SDK 的 LogItem 对象
+                // 创建 LogItem 对象
                 var logItem = new LogItem();
                 logItem.Time = (uint)(int)logTime.ToUnixTimeSeconds();
                 foreach (var kv in contents)
@@ -164,15 +162,15 @@ namespace Logger
                 {
                     var putLogsReq = new PutLogsRequest
                     {
-                        Project = Program.Project,     // 请确保 Program.Project 已定义正确
+                        Project = Program.Project,
                         Logstore = entry.Key,
-                        Topic = "StreamMode",          // Topic 可根据需要自定义
+                        Topic = "StreamMode",
                         LogItems = entry.Value
                     };
 
                     // 同步上传日志
                     PutLogsResponse response = _client.PutLogs(putLogsReq);
-                    SetConsoleColor(ConsoleColor.Blue); // 上传成功使用蓝色提示
+                    SetConsoleColor(ConsoleColor.Blue);
                     Console.WriteLine($"[{entry.Key}] Uploaded: {entry.Value.Count} logs successfully. HTTP Status: {response}");
                 }
             }
