@@ -22,15 +22,35 @@ namespace Logger
             { "DispatcherCSVPipe", "dispatchercsv" },
             { "mlscenariocsvPipe", "mlscenariocsv" }
         };
-
         public static void Main(string[] args)
         {
             LoadCredentials();
 
             if (args.Length == 0)
             {
-                Console.WriteLine("Invalid arguments. Use: Logger.exe /stream OR Logger.exe /file /logstore <filepath>");
+                Console.WriteLine("------------------------------------------------------------------");
+                Console.WriteLine(@"       __   ____  _________________    __________  ____  __      ");
+                Console.WriteLine(@"      / /  / __ \/ ___/ ___/ __/ _ \  /_  __/ __ \/ __ \/ /      ");
+                Console.WriteLine(@"     / /__/ /_/ / (_ / (_ / _// , _/   / / / /_/ / /_/ / /__     ");
+                Console.WriteLine(@"    /____/\____/\___/\___/___/_/|_|   /_/  \____/\____/____/     ");
+                Console.WriteLine();
+                Console.WriteLine(@"                                               liuty24@lenovo.com");
+                Console.WriteLine("------------------------------------------------------------------");
+                Console.WriteLine("Invalid arguments. Please use one of the following options:");
+                Console.WriteLine("  Logger.exe /stream                       - Start streaming mode");
+                Console.WriteLine("  Logger.exe /file /logstore <filepath>    - Start file mode");
+                Console.WriteLine();
+                Console.WriteLine();
+                Console.WriteLine();
+                Console.WriteLine("For more information:");
+                Console.WriteLine("  https://docs.terry.ee/LightweightTools/LoggerTool/");
+                Console.WriteLine("------------------------------------------------------------------");
+                Console.WriteLine("Press any key to exit...");
+                Console.ReadLine(); // 等待用户按键后退出
             }
+
+
+
             else if (args[0].Equals("/stream", StringComparison.OrdinalIgnoreCase) && args.Length == 1)
             {
                 var streamMode = new StreamMode(Endpoint);
