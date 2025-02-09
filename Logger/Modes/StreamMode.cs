@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-// SDK 命名空间
+// SDK
 using Aliyun.Api.LOG.Data;
 using Aliyun.Api.LOG.Request;
 using Aliyun.Api.LOG.Response;
