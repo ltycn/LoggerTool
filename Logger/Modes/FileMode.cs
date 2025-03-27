@@ -24,10 +24,10 @@ namespace Logger
         {
             var logs = new List<LogItem>();
             const int batchSize = 5000; // 设定触发上传的阈值 (行数)
+            int totalUploaded = 0; // 用于记录总共上传的日志数量
 
             try
             {
-
                 foreach (var log in Helpers.ParseLogFile(logStore, filePath))
                 {
                     logs.Add(log);
@@ -35,6 +35,8 @@ namespace Logger
                     {
                         Console.WriteLine($"[{logStore}] Uploading {logs.Count} logs...");
                         UploadLogs(_client, logStore, logs);
+                        totalUploaded += logs.Count; // 更新上传总量
+                        Console.WriteLine($"[{logStore}] Total uploaded logs: {totalUploaded}");
                         logs.Clear();
                     }
                 }
@@ -44,6 +46,8 @@ namespace Logger
                 {
                     Console.WriteLine($"[{logStore}] Uploading remaining {logs.Count} logs...");
                     UploadLogs(_client, logStore, logs);
+                    totalUploaded += logs.Count; // 更新上传总量
+                    Console.WriteLine($"[{logStore}] Total uploaded logs: {totalUploaded}");
                 }
             }
             catch (Exception ex)

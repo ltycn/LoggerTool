@@ -98,6 +98,54 @@ namespace Logger
                 }
             }
 
+            // 新增 autotestlog 的解析逻辑
+            else if (logStore == "autotestlog")
+            {
+                // 从文件名中提取时间戳
+                var fileName = Path.GetFileNameWithoutExtension(filePath);
+                var timestampMatch = Regex.Match(fileName, @"AutoTestResult_(\d{8}-\d{6})");
+                if (timestampMatch.Success)
+                {
+                    var timestamp = timestampMatch.Groups[1].Value;
+
+                    var reader = new StreamReader(filePath);
+                    var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture));
+
+                    // 读取 CSV 数据记录
+                    var records = csv.GetRecords<dynamic>();
+                    foreach (var record in records)
+                    {
+                        var logItem = new LogItem();
+                        var contents = new Dictionary<string, string>();
+
+                        // 遍历每个字段，确保字段的值非空并且清理列头
+                        foreach (var property in (IDictionary<string, object>)record)
+                        {
+                            // 清洗 header 和内容
+                            var cleanKey = CleanHeader(property.Key);  // 清洗 header
+                            var cleanValue = property.Value?.ToString()?.Replace(" ", "");  // 去掉值中的所有空格
+
+                            // 只保留非空的内容
+                            if (!string.IsNullOrEmpty(cleanValue))
+                            {
+                                contents[cleanKey] = cleanValue;
+                            }
+                        }
+
+                        // 使用文件名中的时间戳作为日志时间
+                        logItem.Time = ParseLogTime(timestamp);
+
+                        // 将日志内容推入 LogItem
+                        foreach (var kv in contents)
+                        {
+                            logItem.PushBack(kv.Key, kv.Value);
+                        }
+
+                        logs.Add(logItem);
+                    }
+                }
+            }
+
             return logs;
         }
 
@@ -117,33 +165,53 @@ namespace Logger
 
         private static uint ParseLogTime(string timestamp)
         {
-            var formats = new[]
+            // 去除方括号和首尾空白
+            string cleanedTimestamp = timestamp.Trim().TrimStart('[').TrimEnd(']');
+
+            // 增加一个格式，允许时、分、秒为单数字
+            var standardFormats = new[]
             {
-                "yyyy-MM-dd HH:mm:ss",
-                "yyyy-M-d HH:mm:ss"
+                "yyyy-MM-dd HH:mm:ss",   // 处理 2025-01-21 13:24:44
+                "yyyy-M-d HH:mm:ss",     // 处理 2025-1-21 13:24:44（月份/日期为单数字，但时、分、秒要求两位）
+                "yyyy-M-d H:m:s",        // 处理 2025-1-21 13:26:7 和 2025-1-21 14:0:8（时、分、秒也允许为单数字）
+                "MM-dd-HH:mm:ss:fff",     // 处理不带年份的格式（低优先级）
+                "yyyyMMdd-HHmmss"
             };
 
-            if (DateTimeOffset.TryParseExact(timestamp, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var time))
+            if (DateTimeOffset.TryParseExact(
+                cleanedTimestamp,
+                standardFormats,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var standardTime))
             {
-                return (uint)time.ToUnixTimeSeconds();
+                return (uint)standardTime.ToUnixTimeSeconds();
             }
 
-            if (Regex.IsMatch(timestamp, @"^\d{2}-\d{2}-\d{2}-\d{2}-\d{2}:\d{1,3}$"))
+            // 处理自定义格式 [02-09-23:44:24:837] 和 [02-10-00-54-17:178]
+            string[] parts = cleanedTimestamp.Split(new[] { '-', ':', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+            if (parts.Length == 6 && cleanedTimestamp.Contains("-") && cleanedTimestamp.Contains(":"))
             {
-                string[] parts = timestamp.Split(new[] { '-', ':', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                // 假设年份为当前年，组合成完整时间字符串
+                string year = DateTime.UtcNow.Year.ToString();
+                string month = parts[0].PadLeft(2, '0');
+                string day = parts[1].PadLeft(2, '0');
+                string hour = parts[2].PadLeft(2, '0');
+                string minute = parts[3].PadLeft(2, '0');
+                string second = parts[4].PadLeft(2, '0');
 
-                string fullTimestamp = $"{DateTime.UtcNow.Year}-{parts[0].PadLeft(2, '0')}-{parts[1].PadLeft(2, '0')} {parts[2].PadLeft(2, '0')}:{parts[3].PadLeft(2, '0')}:{parts[4].PadLeft(2, '0')} {parts[5].PadLeft(3, '0')}";
+                // 格式化为 yyyy-MM-dd HH:mm:ss
+                string fullTimestamp = $"{year}-{month}-{day} {hour}:{minute}:{second}";
 
-                if (DateTimeOffset.TryParseExact(fullTimestamp, "yyyy-MM-dd HH:mm:ss fff", CultureInfo.InvariantCulture, DateTimeStyles.None, out time))
+                if (DateTimeOffset.TryParseExact(
+                    fullTimestamp,
+                    "yyyy-MM-dd HH:mm:ss",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var customTime))
                 {
-                    return (uint)time.ToUnixTimeSeconds();
-                }
-
-                string adjustedTimestamp = fullTimestamp.Substring(0, fullTimestamp.Length - 1) + "00";
-
-                if (DateTimeOffset.TryParseExact(adjustedTimestamp, "yyyy-MM-dd HH:mm:ss fff", CultureInfo.InvariantCulture, DateTimeStyles.None, out time))
-                {
-                    return (uint)time.ToUnixTimeSeconds();
+                    return (uint)customTime.ToUnixTimeSeconds();
                 }
             }
 

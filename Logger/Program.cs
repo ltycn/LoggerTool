@@ -17,6 +17,7 @@ namespace Logger
 
         public static readonly Dictionary<string, string> PipeToLogStore = new Dictionary<string, string>
         {
+            { "AutoTestLog", "autotestlog" },
             { "CpuInfoPipe", "cpuinfolog" },
             { "DispatcherLogPipe", "dispatcherlog" },
             { "DispatcherCSVPipe", "dispatchercsv" },
